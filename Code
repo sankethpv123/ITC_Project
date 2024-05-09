@@ -1,0 +1,154 @@
+import numpy as np
+from PIL import Image
+import matplotlib.pyplot as plt
+
+class HuffmanNode:
+    def __init__(self, value, freq):
+        self.value = value
+        self.freq = freq
+        self.left = None
+        self.right = None
+
+def build_frequency_table(data):
+    frequency_table = {}
+    for row in data:
+        for value in row:
+            if np.isscalar(value):
+                value = int(value)
+                if value in frequency_table:
+                    frequency_table[value] += 1
+                else:
+                    frequency_table[value] = 1
+            else:
+                for sub_value in value:
+                    sub_value = int(sub_value)
+                    if sub_value in frequency_table:
+                        frequency_table[sub_value] += 1
+                    else:
+                        frequency_table[sub_value] = 1
+    return frequency_table
+
+
+
+
+def build_huffman_tree(frequency_table):
+    nodes = [HuffmanNode(value, freq) for value, freq in frequency_table.items()]
+    
+    while len(nodes) > 1:
+        min_freq_node = min(nodes, key=lambda x: x.freq)
+        left_node = nodes.pop(nodes.index(min_freq_node))
+        
+        min_freq_node = min(nodes, key=lambda x: x.freq)
+        right_node = nodes.pop(nodes.index(min_freq_node))
+        
+        merged_node = HuffmanNode(None, left_node.freq + right_node.freq)
+        merged_node.left = left_node
+        merged_node.right = right_node
+        nodes.append(merged_node)
+
+    return nodes[0]
+
+def build_huffman_codes(node, code, huffman_codes):
+    if node is None:
+        return
+
+    if node.value is not None:
+        huffman_codes[node.value] = code
+        return
+
+    build_huffman_codes(node.left, code + '0', huffman_codes)
+    build_huffman_codes(node.right, code + '1', huffman_codes)
+
+def encode_image(data, huffman_codes):
+    encoded_data = ''
+    for value in data.ravel():
+        value = int(value)
+        encoded_data += huffman_codes[value]
+    return encoded_data
+
+
+def decode_image(encoded_data, huffman_tree, image_shape):
+    decoded_data = ''
+    current_node = huffman_tree
+    decoded_values = []
+
+    for bit in encoded_data:
+        if bit == '0':
+            current_node = current_node.left
+        else:
+            current_node = current_node.right
+
+        if current_node.value is not None:
+            decoded_values.append(current_node.value)
+            current_node = huffman_tree
+
+        if len(decoded_values) == np.prod(image_shape):
+            break
+
+    return np.array(decoded_values, dtype=np.uint8).reshape(image_shape)
+
+def plot_histogram(image, decoded_image):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+    axes[0].hist(image.ravel(), bins=256, color='blue', alpha=0.7)
+    axes[0].set_title('Original Image Histogram')
+    axes[0].set_xlabel('Pixel Intensity')
+    axes[0].set_ylabel('Frequency')
+
+    axes[1].hist(decoded_image.ravel(), bins=256, color='green', alpha=0.7)
+    axes[1].set_title('Decoded Image Histogram')
+    axes[1].set_xlabel('Pixel Intensity')
+    axes[1].set_ylabel('Frequency')
+
+    plt.tight_layout()
+    plt.show()
+
+def main():
+    print("Huffman Image Compression Program")
+    print("=================================================================")
+    file = input("Enter the filename: ")
+    image = np.asarray(Image.open(file), np.uint8)
+    original_data_size = image.size * image.itemsize
+
+    frequency_table = build_frequency_table(image)
+    huffman_tree = build_huffman_tree(frequency_table)
+
+    huffman_codes = {}
+    build_huffman_codes(huffman_tree, '', huffman_codes)
+
+    encoded_data = encode_image(image, huffman_codes)
+    decoded_image = decode_image(encoded_data, huffman_tree, image.shape)
+    compressed_data_size = len(encoded_data) // 8
+
+    print("Original data size:", original_data_size)
+    print("Compressed data size:", len(encoded_data) // 8)
+    print("Compression ratio:", (image.size * image.itemsize) / (len(encoded_data) // 8))
+
+    # Plotting input and output images
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    axes[0].imshow(image, cmap='gray')
+    axes[0].set_title('Input Image')
+    axes[0].axis('off')
+    axes[1].imshow(decoded_image, cmap='gray')
+    axes[1].set_title('Output Image')
+    axes[1].axis('off')
+    plt.show()
+
+    # Plotting histogram
+    plot_histogram(image, decoded_image)
+    
+    # Efficiency calculation
+    efficiency = compressed_data_size / original_data_size
+    print("Efficiency:", efficiency)
+
+    # Redundancy calculation
+    redundancy = 1 - efficiency
+    print("Redundancy:", redundancy)
+
+    # Saving the reconstructed image
+    Image.fromarray(decoded_image).save('Reconstructed.png')
+    save_filename = input("Enter the filename to save the reconstructed image: ")
+    Image.fromarray(decoded_image).save(save_filename)
+
+if __name__ == "__main__":
+    main()
